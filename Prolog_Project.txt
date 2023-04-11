@@ -1,0 +1,331 @@
+:-['codigo_comum.pl'].
+
+%---------------------------------------------------------------------------------------
+% Predicados auxiliares
+%---------------------------------------------------------------------------------------
+
+% Predicado auxiliar que recebe duas posicoes e devolve a posicao menor(Pos1) e a posicao maior(Pos2) entre as duas.
+menor_para_maior((Y1,X1),(Y2,X2),Pos1,Pos2) :-
+	Y1 > Y2, ! ,
+	Pos1=(Y2,X2), 
+	Pos2 = (Y1,X1).
+menor_para_maior((Y1,X1),(Y2,X2),Pos1,Pos2) :-
+	Y2 == Y1,
+	X1 > X2, !,
+	Pos1=(Y2,X2),
+	Pos2=(Y1,X1).
+
+menor_para_maior((Y1,X1),(Y2,X2),Pos1,Pos2) :- Pos1=(Y1,X1), Pos2=(Y2,X2).
+
+
+
+%-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.1 Predicado extrai_ilhas_linha(N_L, Linha, Ilhas): N_L eh um numero positivo que representa o numero de uma linha, Linha eh uma Lista que corresponde a uma
+% linha de um puzzle, Ilhas(output) eh uma lista ordenada de todas as ilhas extraidas da Linha.
+%-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+extrai_ilhas_linha(N_L,Linha,Ilhas) :- extrai_ilhas_linha(N_L,Linha,0,[],Ilhas). 
+
+extrai_ilhas_linha(_,[],_,Ilhas,Ilhas) :- ! . 
+
+% Sempre que o elemento da Linha for diferente de 0 (espaco vazio) entao eh adicionado ah lista acumuladora(Acc) uma ilha no formato suposto 
+% ilha(Cab(N_L,Pos)) em que Cab eh o numero de pontes, Pos eh o cursor da lista Linha e vai incrementando ao percorrer a mesma.
+
+extrai_ilhas_linha(N_L,[Cab|Resto],Pos,Acc,Ilhas) :-
+	Cab \= 0 , !,   % Todos os espacos vazios sao representados por um 0
+	Posicao is Pos+1 ,  % Pos eh o cursor da lista e vai incrementando.
+	append(Acc,[ilha(Cab,(N_L,Posicao))],NovoAcc),
+	extrai_ilhas_linha(N_L,Resto,Posicao,NovoAcc,Ilhas).
+
+extrai_ilhas_linha(N_L,[_|Resto],Pos,Acc,Ilhas) :-
+	Posicao is Pos+1, !,
+	extrai_ilhas_linha(N_L,Resto,Posicao,Acc,Ilhas).
+
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.2 Predicado ilhas(Puz, Ilhas):  Puz eh uma lista ordenada de Linhas de um puzzle, Ilhas(output) eh uma lista ordenada constituida pelas ilhas extraidas de cada Linha do Puzzle.
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+ilhas(Puz,Ilhas) :- ilhas(Puz,0,[],Ilhas).
+
+ilhas([],_,Ilhas,Ilhas) :- !.
+
+ilhas([Cab|Resto],Pos,Acc,Ilhas) :-
+	Posicao is Pos + 1 , % Posicao e o numero da linha do puzzle e vai incrementando ao percorrer o puzzle.
+	extrai_ilhas_linha(Posicao,Cab,Ilhas_linha),
+	append(Acc,Ilhas_linha,NovoAcc),
+	ilhas(Resto,Posicao,NovoAcc,Ilhas).
+
+
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.3 Predicado vizinhas(Ilhas, Ilha, Vizinhas): Ilhas eh uma lista ordenada das ilhas de um puzzle, Ilha eh uma ilha,Vizinhas(output) eh uma lista ordenada de todas as 
+% ilhas vizinhas da Ilha.
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+% Vai buscar o primeiro elemento de Lista que corresponde a ilha vizinha pretendida, e adiciona a uma nova Lista.
+
+vizinhas_aux([Ilha|_],Resultado,Acc):-
+	append(Resultado,[Ilha],Acc),!.
+
+vizinhas_aux(_,Resultado,Acc) :- Acc = Resultado.
+
+
+vizinhas(Ilhas,ilha(_,(Y,X)),Vizinhas) :-
+	findall(ilha(N1,(Y,X1)),(member(ilha(N1,(Y,X1)),Ilhas),X1<X),Col_Ei), % Todas as ilhas na linha da Ilha mas numa coluna inferior a da Ilha
+	findall(ilha(N2,(Y,X1)),(member(ilha(N2,(Y,X1)),Ilhas),X1>X),Col_D), % Todas as ilhas na mesma linha da Ilha mas numa coluna superior a da Ilha
+	findall(ilha(N3,(Y1,X)),(member(ilha(N3,(Y1,X)),Ilhas),Y1<Y),Col_Ci), % Todas as ilhas na mesma coluna que a Ilha mas numa Linha inferior a da Ilha
+	findall(ilha(N4,(Y1,X)),(member(ilha(N4,(Y1,X)),Ilhas),Y1>Y),Col_B), % Todas as ilhas na mesma coluna que a Ilha mas numa Linha superior a da Ilha.
+	reverse(Col_Ci,Col_C), % Como a ilha mais perto da Ilha pretendida e o ultimo elemento da Lista, esta passa a ser revertida
+	reverse(Col_Ei,Col_E),
+	vizinhas(_,_,Vizinhas,[Col_C,Col_E,Col_D,Col_B],[]).
+
+vizinhas(_,_,Vizinhas,[],Vizinhas) :- !.
+
+% Vai aplicar vizinhas_au/3 ao Vizinhas e adiciona o resultado a um acumulador.
+
+vizinhas(_,_,Vizinhas,[Cab|Resto],Acc) :-
+	vizinhas_aux(Cab,Acc,NovoAcc),
+	vizinhas(_,_,Vizinhas,Resto,NovoAcc).
+
+
+
+
+
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.4 Predicado estado(Ilhas, Estado),: Ilhas eh uma lista ordenada das ilhas de um puzzle , Estado(output) eh uma lista ordenada com entradas  do tipo [Ilha,Vizinhas,Pontes] 
+% em que Vizinhas eh uma lista de vizinhas dessa mesma ilha e Pontes eh a lista de pontes formadas com essa mesma ilha.No inicio Pontes eh uma lista vazia.
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+estado(Ilhas,Estado) :- estado(Ilhas,Ilhas,Estado,[]).
+
+estado(_,[],Estado,Estado) :- !.
+
+% Encontra as vizinhas de uma Ilha , forma a entrada com o formato suposto , adiciona a Entrada ao acumulador e percorre o resto da Lista de Ilhas.
+
+estado(Ilhas,[Cab|Resto],Estado,Acc) :-
+	vizinhas(Ilhas,Cab,Vizinhas),!,
+	Entrada=[Cab,Vizinhas,[]], 
+	append(Acc,[Entrada],Nacc),
+	estado(Ilhas,Resto,Estado,Nacc).
+	
+
+
+%------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.5 Predicado posicoes_entre(Pos1, Pos2, Posicoes): Este Predicado recebe duas posicoes que se encontram na mesma coluna ou linha(Pos1 e Pos2) 
+% e devolte uma lista com todas as posicoes entre estas duas (Posicoes) excluindo Pos1 e Pos2.
+%------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+posicoes_entre((Y1,X1),(Y2,X2),Posicoes) :-
+	(Y1 == Y2 ; X1 == X2 ),!,   % Se as posicoes nao estiverem na mesma coluna ou linha o predicado da false.
+	menor_para_maior((Y1,X1),(Y2,X2),Pos1,Pos2),   % Pos1 e Pos2 serao a posicao menor e maior, respetivamente, entre as posicoes inseridas no predicado.
+	posicoes_entre(Pos1,Pos2,[],Posicoes).
+
+
+% Adiciona ao acumulador a posicao uma linha acima da posicao mais pequena (Y1,X1).
+ 
+posicoes_entre((Y1,X1),(Y2,X2),Acc,Posicoes) :-
+	Y1 \= Y2, 
+	Y is Y1 + 1, 
+	Y \= Y2 , !, 
+	append(Acc,[(Y,X1)],Nacc),  % Se a posicao , uma coluna acima , for igual a posicao (Y2,X2) entao o resultado eh false e passa para a base de recursao.
+	posicoes_entre((Y,X1),(Y2,X2),Nacc,Posicoes).
+
+% Adiciona ao acumulador a posicao uma coluna acima da posicao mais pequena (Y1,X1).
+
+posicoes_entre((Y1,X1),(Y2,X2),Acc,Posicoes) :-
+	X1 \= X2, 
+	X is X1 + 1,
+	X \= X2 ,!,% Se a posicao , uma coluna acima, for igual a posicao (Y2,X2) entao o resultado eh false e passa para a base de recursao.
+	append(Acc,[(Y1,X)],Nacc),
+	posicoes_entre((Y1,X),(Y2,X2),Nacc,Posicoes).
+
+posicoes_entre(_,_,Posicoes,Posicoes).
+
+
+	
+%--------------------------------------------------------------------------------------------------------------------------------------
+% 2.6 Predicado cria_ponte(Pos1, Pos2, Ponte) : Recebe duas posicoes Pos1 e Pos2 e cria uma ponte(Ponte) entre as duas posicoes.
+%--------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+cria_ponte((Y1,X1),(Y2,X2),Ponte) :- 
+	menor_para_maior((Y1,X1),(Y2,X2),Pos1,Pos2),!,
+	Ponte = ponte(Pos1,Pos2).
+	
+	
+
+
+%------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.7 Predicado caminho_livre(Pos1, Pos2, Posicoes, I, Vz):Pos1,Pos2 sao posicoes, Posicoes eh uma lista ordenada das posicoes entre Pos1 e Pos2, I eh uma ilha e Vz
+% eh uma  das vizinhas de I. Assim a adicao de uma ponte entre Pos1 e Pos2 nao faz com que I e VZ deixem de ser vizinhas.
+%------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+% Se a posicao da ilha for uma das Posicoes inseridas e as posicoes entre a ilha e a sua vizinha(Pos_entre) forem iguais entao o caminho eh livre.
+
+caminho_livre(Pos1,Pos2,Posicoes,ilha(_,(Y1,X1)),ilha(_,(Y2,X2))) :-
+	Lista_Pos = [Pos1,Pos2],
+	posicoes_entre((Y1,X1),(Y2,X2),Pos_entre),  % Posicoes entre a ilha e a sua vizinha
+	((nth1(_,Lista_Pos,(Y1,X1)) ,Pos_entre == Posicoes) ; caminho_livre(Posicoes,Pos_entre)).
+	
+
+caminho_livre(_,[]) :- !.
+
+% Sendo (Y1,X1) uma posicao das posicoes entre a ilha e a sua vizinha, se esta se encontrar em Posicoes , entao nao eh um caminho livre.
+
+caminho_livre(Posicoes,[(Y1,X1)|Resto]) :-
+	not(nth1(_,Posicoes,(Y1,X1))),!,
+	caminho_livre(Posicoes,Resto).
+	
+
+
+
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.8 Predicado actualiza_vizinhas_entrada(Pos1, Pos2, Posicoes, Entrada,Nova_Entrada):Pos1 e Pos2 sao as posicoes entre as quais ira ser adicionada uma ponte, 
+% Posicoes eh a lista ordenada de posicoes entre Pos1 e Pos2, e Entrada eh uma entrada , Nova_Entrada(output) eh o resultado de remover as ilhas ,da Entrada, que deixaram de 
+% ser vizinhas apos a adicao da ponte.
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+% Devolve a vizinha se o caminho for livre entre a ilha e a sua vizinha.Devolve uma lista vazia se o contrario for verdade.
+
+actualiza_vizinhas_entrada_aux(Pos1,Pos2,Posicoes,Ilha,Vizinha,Vizinha_final) :-
+	caminho_livre(Pos1,Pos2,Posicoes,Ilha,Vizinha) -> Vizinha_final = Vizinha ;
+	Vizinha_final = [].
+
+% Aplica o predicado auxiliar actualiza_vizinhas_entrada_aux/4 a todas as vizinhas da ilha.
+
+actualiza_vizinhas_entrada(Pos1,Pos2,Posicoes,[Ilha,Vizinhas,Pontes],NovaEntrada) :-
+	maplist(actualiza_vizinhas_entrada_aux(Pos1,Pos2,Posicoes,Ilha),Vizinhas,Lista_vizinhas),
+	flatten(Lista_vizinhas,Vizinhas_finais),
+	NovaEntrada = [Ilha,Vizinhas_finais,Pontes].
+	
+
+
+%--------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.9 Predicado actualiza_vizinhas_apos_pontes(Estado, Pos1, Pos2, Novo_estado): Pos1 e Pos2 sao as posicoes entre as quais foi adicionada uma ponte,  
+% Novo_estado eh o estado que se obtem de Estado apos a actualizacao das ilhas vizinhas de cada uma das suas entradas.
+%--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+% Aplica o predicado actualiza_vizinhas_entrada/3 a todas as entradas do Estado.
+
+actualiza_vizinhas_apos_pontes(Estado,Pos1,Pos2,Novo_estado) :-	
+	posicoes_entre(Pos1,Pos2,Posicoes),
+	maplist(actualiza_vizinhas_entrada(Pos1,Pos2,Posicoes),Estado,Novo_estado).
+
+
+
+
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.10 Predicado ilhas_terminadas(Estado, Ilhas_term) :Estado eh um estado ,  Ilhas_term(output) eh a lista de ilhas que ja tem todas as pontes associadas, designadas por 
+% ilhas terminadas. Se a entrada referente a uma ilha for [ilha(N_pontes,Pos), Vizinhas, Pontes], esta ilha estah terminada se N_pontes for diferente de
+% 'X' e o comprimento da lista Pontes for N_pontes.
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+% Se o tamanho de Pontes for igual a N ou N for 'X' devolve a ilha , caso contrario devolve lista vazia.
+
+ilhas_terminadas_aux([ilha(N,Pos),_,Pontes],Terminada):-
+	length(Pontes,Dim), ('X' \== N ,
+	Dim == N) -> Terminada = ilha(N,Pos) ;
+	Terminada = [].
+	
+% Aplica o predicado auxiliar ilhas_terminadas_aux/2 a todas as entradas do estado.
+
+ilhas_terminadas(Estado,Ilhas_term) :-
+	maplist(ilhas_terminadas_aux,Estado,Pre_Terminadas),
+	flatten(Pre_Terminadas,Ilhas_term).
+
+
+
+
+%----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.11 Predicado tira_ilhas_terminadas_entrada(Ilhas_term, Entrada, Nova_entrada) : Ilhas_term eh uma lista de ilhas terminadas e Entrada eh uma entrada , Nova_entrada(output) eh 
+% a entrada resultante de remover as ilhas de Ilhas_term, da lista de ilhas vizinhas de Entrada.
+%----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+% Devolve lista vazia se a vizinha se encontrar nas ilhas terminadas , caso contrario devolve a vizinha.	
+
+tira_ilhas_terminadas_entrada_aux(Ilhas_terminadas,Vizinha,Resultado) :-
+	nth1(_,Ilhas_terminadas,Vizinha) -> Resultado = [] ;
+	Resultado = Vizinha.
+
+% Aplica o predicado auxiliar tira_ilhas_terminadas_entrada_aux/3 a todas as ilhas vizinhas da entrada.
+
+tira_ilhas_terminadas_entrada(Ilhas_terminadas,[Ilha,Vizinhas,Pontes],Nova_entrada) :-
+	maplist(tira_ilhas_terminadas_entrada_aux(Ilhas_terminadas),Vizinhas,Pre_Vizinhas),
+	flatten(Pre_Vizinhas,Vizinhas_final),
+	Nova_entrada = [Ilha,Vizinhas_final,Pontes].
+
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.12 Predicado tira_ilhas_terminadas(Estado, Ilhas_term, Novo_estado) Estado eh um estado , Ilhas_term eh uma lista de ilhas terminadas,  Novo_estado(output) eh o estado 
+% resultante de aplicar o predicado tira_ilhas_terminadas_entrada/3 a cada uma das entradas de Estado.
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+tira_ilhas_terminadas(Estado,Ilhas_terminadas,Novo_estado) :-
+	maplist(tira_ilhas_terminadas_entrada(Ilhas_terminadas),Estado,Novo_estado).
+
+
+
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.13 Predicado marca_ilhas_terminadas_entrada(Ilhas_term, Entrada,Nova_entrada),Ilhas_term eh uma lista de ilhas terminadas, Entrada eh uma entrada significa que 
+% Nova_entrada(output) eh a entrada obtida de Entrada(se a ilha de Entrada pertencer a Ilhas_term, o numero de pontes desta eh substituido por 'X'; 
+% caso contrario Nova_entrada eh igual a Entrada).
+%---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+% Devolve a entrada marcada se a ilha se encontrar na lista de ilhas terminadas, caso contrario devolve a entrada.	
+
+marca_ilhas_terminadas_entrada(Ilhas_term,[ilha(N,Pos),Vizinhas,Pontes],Nova_entrada) :-
+	nth1(_,Ilhas_term,ilha(N,Pos)) -> Nova_entrada = [ilha('X',Pos),Vizinhas,Pontes];
+	Nova_entrada = [ilha(N,Pos),Vizinhas,Pontes].
+
+
+
+%--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.14 Predicado marca_ilhas_terminadas(Estado, Ilhas_term, Novo_estado),Estado eh um estado,Ilhas_term eh uma lista de ilhas terminadas, Novo_estado (output) eh o estado 
+% resultante de aplicar o predicado marca_ilhas_terminadas_entrada/3 a cada uma das entradas de Estado.
+%--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+marca_ilhas_terminadas(Estado,Ilhas_term,Novo_estado) :-
+	maplist(marca_ilhas_terminadas_entrada(Ilhas_term),Estado,Novo_estado).
+
+%------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.15 Predicado trata_ilhas_terminadas(Estado, Novo_estado),Estado eh um estado, Novo_estado (output) eh o estado resultante de aplicar os predicados tira_ilhas_terminadas/4
+% e marca_ilhas_terminadas/3 a Estado.
+%------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+	
+trata_ilhas_terminadas(Estado,Novo_estado) :-
+	ilhas_terminadas(Estado,Ilhas_term),
+	marca_ilhas_terminadas(Estado,Ilhas_term,Novo_estado1),
+	tira_ilhas_terminadas(Novo_estado1,Ilhas_term,Novo_estado).
+
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% 2.16 Predicado junta_pontes(Estado, Num_pontes, Ilha1, Ilha2, Novo_estado), Estado eh um estado e Ilha1 e Ilha2 sao 2 ilhas, Novo_estado(output) eh o estado resultante 
+% de Estado por adicao de Num_pontes pontes entre Ilha1 e Ilha2 .
+%-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+% Se a ilha for uma das ilhas da ponte entao cria uma ponte e adiciona a Pontes , e devolve a entrada modificada, caso contrario devolve a Entrada. 
+
+junta_pontes_aux([ponte(Pos1,Pos2)|Resto],[ilha(N,Pos),Vizinhas,Pre_Pontes],Nova_Entrada) :-
+	(Pos == Pos1 ; Pos == Pos2) -> 
+	append(Pre_Pontes,[ponte(Pos1,Pos2)|Resto],Pontes),
+	Nova_Entrada = [ilha(N,Pos),Vizinhas,Pontes];
+	Nova_Entrada = [ilha(N,Pos),Vizinhas,Pre_Pontes].
+
+
+junta_pontes(Estado,Num_pontes,ilha(_,(Y1,X1)),ilha(_,(Y2,X2)),Novo_estado) :-
+	Num_pontes =< 2,
+	length(L_pontes,Num_pontes),% Cria uma lista com Num_pontes espacos.
+	maplist(cria_ponte((Y1,X1),(Y2,X2)),L_pontes), % unifica Num_pontes de pontes a lista L_pontes.
+	maplist(junta_pontes_aux(L_pontes),Estado,Estado_s_pontes), % Aplica o predicado junta_pontes_aux/3 a todas as entradas do Estado devolvendo Estado_S_pontes
+	actualiza_vizinhas_apos_pontes(Estado_s_pontes,(Y1,X1),(Y2,X2),Estado_c_pontes), % Actualiza as vizinhas do novo estado Estado_S_pontes.
+	trata_ilhas_terminadas(Estado_c_pontes,Novo_estado). % aplica o predicado tira_ilhas_terminadas ao estado Estado_c_pontes.
+
+
